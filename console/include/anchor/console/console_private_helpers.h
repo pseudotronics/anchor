@@ -1,6 +1,6 @@
 #pragma once
 
-#if defined(__GNUC__)
+#if defined(__GNUC__) || defined(__TI_COMPILER_VERSION__)
 
 // The _CONSOLE_NUM_ARGS(...) macro returns the number of arguments passed to it (0-10)
 #define _CONSOLE_NUM_ARGS(...) _CONSOLE_NUM_ARGS_HELPER1(_, ##__VA_ARGS__, _CONSOLE_NUM_ARGS_SEQ())

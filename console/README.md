@@ -80,9 +80,9 @@ section.
 This can be disabled to save code space. Disabling this will also remove the
 `desc` attribute of commands and arguments.
 * `CONSOLE_FULL_CONTROL` - Enables more advanced line control features such as
-backspace and CTRL-C (default of 1). Also enables the `console_print_line()`
-function. This setting also results in the console echo'ing back any valid
-characters it receives.
+backspace, left and right arrow keys, and CTRL-C (default of 1). Also enables
+the `console_print_line()` function. This setting also results in the console
+echo'ing back any valid characters it receives.
 * `CONSOLE_TAB_COMPLETE` - Enables tab-completion of console commands (default
 of 1). This depends on `CONSOLE_FULL_CONTROL` being enabled.
 * `CONSOLE_HISTORY` - Enables history accessible via up/down arrow keys with

@@ -23,6 +23,7 @@ static console_command_def_t m_commands[CONSOLE_MAX_COMMANDS] CONSOLE_BUFFER_ATT
 static uint32_t m_num_commands;
 static char m_line_buffer[CONSOLE_MAX_LINE_LENGTH] CONSOLE_BUFFER_ATTRIBUTES;
 static uint32_t m_line_len;
+static uint32_t m_cursor_pos;
 static bool m_line_invalid;
 static bool m_is_active;
 static uint32_t m_escape_sequence_index = 0;
@@ -203,13 +204,20 @@ static void reset_line_and_print_prompt(void) {
 #endif
     m_escape_sequence_index = 0;
     m_line_len = 0;
+    m_cursor_pos = 0;
     m_line_invalid = false;
     m_line_buffer[0] = '\0';
     write_str(CONSOLE_PROMPT);
 }
 
 static void push_char(char c) {
-    m_line_buffer[m_line_len++] = c;
+    if (m_cursor_pos != m_line_len) {
+        // shift the existing data to the right to make space
+        memmove(&m_line_buffer[m_cursor_pos + 1], &m_line_buffer[m_cursor_pos], m_line_len - m_cursor_pos);
+    }
+    m_line_buffer[m_cursor_pos] = c;
+    m_cursor_pos++;
+    m_line_len++;
     m_line_buffer[m_line_len] = '\0';
     if (m_line_len == CONSOLE_MAX_LINE_LENGTH) {
         // filled up the line buffer, so mark the line invalid
@@ -218,8 +226,19 @@ static void push_char(char c) {
 }
 
 #if CONSOLE_FULL_CONTROL
+static void move_cursor_to_end(void) {
+    if (m_cursor_pos == m_line_len) {
+        return;
+    }
+    write_str(&m_line_buffer[m_cursor_pos]);
+    m_cursor_pos = m_line_len;
+}
+
 static void erase_current_line(uint32_t new_line_line) {
     if (new_line_line < m_line_len) {
+        // TODO: could optimize this to not have to write out characters we're just going to erase
+        move_cursor_to_end();
+        // erase the characters which the new line won't overwrite
         const uint32_t char_to_erase = m_line_len - new_line_line;
         for (uint32_t i = 0; i < char_to_erase; i++) {
             write_str("\b");
@@ -259,12 +278,14 @@ static void do_tab_complete(void) {
         return;
     }
 
+    move_cursor_to_end();
     if (num_matches == 1) {
         // a single match, so add on the remainder of the command
         const uint32_t prev_line_len = m_line_len;
         for (uint32_t i = m_line_len; i < longest_common_prefix; i++) {
             m_line_buffer[m_line_len++] = first_cmd_def->name[i];
         }
+        m_cursor_pos = m_line_len;
         m_line_buffer[m_line_len] = '\0';
         write_str(&m_line_buffer[prev_line_len]);
     } else if (longest_common_prefix == m_line_len) {
@@ -294,6 +315,7 @@ static void do_tab_complete(void) {
         for (uint32_t i = m_line_len; i < longest_common_prefix; i++) {
             m_line_buffer[m_line_len++] = first_cmd_def->name[i];
         }
+        m_cursor_pos = m_line_len;
         m_line_buffer[m_line_len] = '\0';
         write_str(&m_line_buffer[prev_line_len]);
     }
@@ -430,6 +452,20 @@ void console_process(const uint8_t* data, uint32_t length) {
         } else if (m_escape_sequence_index == 2) {
             // process the command
             m_escape_sequence_index = 0;
+            if (c == 'C') {
+                // right arrow
+                if (m_cursor_pos < m_line_len) {
+                    const char str[2] = {m_line_buffer[m_cursor_pos], '\0'};
+                    write_str(str);
+                    m_cursor_pos++;
+                }
+            } else if (c == 'D') {
+                // left arrow
+                if (m_cursor_pos) {
+                    write_str("\b");
+                    m_cursor_pos--;
+                }
+            }
 #if CONSOLE_HISTORY
             bool update_line_from_history = false;
             if (c == 'A') {
@@ -450,6 +486,7 @@ void console_process(const uint8_t* data, uint32_t length) {
                 erase_current_line(strlen(history_line));
                 strcpy(m_line_buffer, history_line);
                 m_line_len = strlen(m_line_buffer);
+                m_cursor_pos = m_line_len;
                 write_str(CONSOLE_PROMPT);
                 write_str(m_line_buffer);
             }
@@ -477,9 +514,22 @@ void console_process(const uint8_t* data, uint32_t length) {
                 write_str(echo_str);
                 echo_str = NULL;
             }
-            if (m_line_len) {
+            if (m_cursor_pos) {
                 write_str("\b \b");
-                m_line_buffer[--m_line_len] = '\0';
+                if (m_cursor_pos != m_line_len) {
+                    // shift all the characters in the line down
+                    memmove(&m_line_buffer[m_cursor_pos-1], &m_line_buffer[m_cursor_pos], m_line_len - m_cursor_pos);
+                }
+                m_cursor_pos--;
+                m_line_len--;
+                m_line_buffer[m_line_len] = '\0';
+                if (m_cursor_pos != m_line_len) {
+                    write_str(&m_line_buffer[m_cursor_pos]);
+                    write_str(" ");
+                    for (uint32_t i = 0; i < m_line_len - m_cursor_pos + 1; i++) {
+                        write_str("\b");
+                    }
+                }
             }
 #if CONSOLE_TAB_COMPLETE
         } else if (!m_line_invalid && c == '\t') {
@@ -491,10 +541,24 @@ void console_process(const uint8_t* data, uint32_t length) {
 #endif
         } else if (!m_line_invalid && c >= ' ' && c <= '~') {
             // valid character
-            if (!echo_str) {
-                echo_str = &m_line_buffer[m_line_len];
+            if (m_cursor_pos != m_line_len) {
+                if (echo_str) {
+                    write_str(echo_str);
+                    echo_str = NULL;
+                }
+                const uint32_t prev_cursor_pos = m_cursor_pos;
+                push_char(c);
+                write_str(&m_line_buffer[prev_cursor_pos]);
+                for (uint32_t i = 0; i < m_line_len - m_cursor_pos; i++) {
+                    write_str("\b");
+                }
+            } else {
+                if (!echo_str) {
+                    // FIXME for m_cursor_pos != m_line_len
+                    echo_str = &m_line_buffer[m_line_len];
+                }
+                push_char(c);
             }
-            push_char(c);
         }
     }
     if (echo_str) {
