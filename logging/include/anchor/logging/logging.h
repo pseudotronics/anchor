@@ -61,14 +61,15 @@ typedef struct {
 // Initialize the logging library
 bool logging_init(const logging_init_t* init);
 
-// Internal type used to represent a logger
+// Internal type used to represent a logger (should not be directly modified)
 typedef struct {
-    uint8_t _private[sizeof(logging_level_t)];
+    logging_level_t level;
     const char* const module_prefix;
 } logging_logger_t;
 
 // Change the logging threshold for the current module
-#define LOG_SET_LEVEL(LEVEL) logging_set_level_impl(&_logging_logger, LEVEL)
+
+#define LOG_SET_LEVEL(LEVEL) _logging_logger->level = LEVEL
 
 // Macros for logging at each level
 #define LOG_DEBUG(...) _LOG_LEVEL_IMPL(LOGGING_LEVEL_DEBUG, __VA_ARGS__)
@@ -79,13 +80,18 @@ typedef struct {
 // Internal implementation macros / functions which are called via the macros above
 #define _LOG_LEVEL_IMPL(LEVEL, ...) logging_log_impl(&_logging_logger, LEVEL, FILENAME, __LINE__, __VA_ARGS__)
 void logging_log_impl(logging_logger_t* logger, logging_level_t level, const char* file, int line, const char* fmt, ...) _LOGGING_FORMAT_ATTR;
-void logging_set_level_impl(logging_logger_t* logger, logging_level_t level);
 
 // Per-file context object which we should create
 static logging_logger_t _logging_logger _LOGGING_USED_ATTR = {
-    ._private = {0},
+#ifdef LOGGING_FILE_DEFAULT_LEVEL
+    .level = LOGGING_FILE_DEFAULT_LEVEL,
+#undef LOGGING_FILE_DEFAULT_LEVEL
+#else
+    .level = LOGGING_LEVEL_DEFAULT,
+#endif
 #ifdef LOGGING_MODULE_NAME
     .module_prefix = LOGGING_MODULE_NAME ":",
+#undef LOGGING_MODULE_NAME
 #else
     .module_prefix = 0,
 #endif

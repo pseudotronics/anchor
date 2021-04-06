@@ -28,6 +28,11 @@ $(BUILD_DIR)/%.o: %.c
 In order to prefix the file name with a module name, define
 `LOGGING_MODULE_NAME` before including `logging.h` in your source file.
 
+### Per-File Default Level
+
+In order to set a default logging level at compile time, define
+`LOGGING_FILE_DEFAULT_LEVEL` before including `logging.h`.
+
 ### Compile Options
 
 Parameters and additional features of the logging library can be configured

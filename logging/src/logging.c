@@ -13,13 +13,6 @@
 #define FILE_NAME_LENGTH        32
 #define FULL_LOG_MAX_LENGTH     (LOGGING_MAX_MSG_LENGTH + LEVEL_PREFIX_LENGTH + TIME_LENGTH + FILE_NAME_LENGTH + 1)
 
-#define GET_IMPL(LOGGER) ((logger_impl_t*)LOGGER->_private)
-
-typedef struct {
-    logging_level_t level;
-} logger_impl_t;
-_Static_assert(sizeof(logger_impl_t) == sizeof(((logging_logger_t*)0)->_private), "Invalid context size");
-
 #if LOGGING_USE_DATETIME
 typedef struct {
     uint16_t year;
@@ -104,8 +97,7 @@ bool logging_init(const logging_init_t* init) {
 }
 
 void logging_log_impl(logging_logger_t* logger, logging_level_t level, const char* file, int line, const char* fmt, ...) {
-    logger_impl_t* impl = GET_IMPL(logger);
-    const logging_level_t min_level = impl->level == LOGGING_LEVEL_DEFAULT ? m_init.default_level : impl->level;
+    const logging_level_t min_level = logger->level == LOGGING_LEVEL_DEFAULT ? m_init.default_level : logger->level;
     if (level < min_level) {
         return;
     }
@@ -168,8 +160,4 @@ void logging_log_impl(logging_logger_t* logger, logging_level_t level, const cha
     if (m_init.lock_function) {
         m_init.lock_function(false);
     }
-}
-
-void logging_set_level_impl(logging_logger_t* logger, logging_level_t level) {
-    GET_IMPL(logger)->level = level;
 }
