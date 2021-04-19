@@ -105,6 +105,7 @@ void logging_log_impl(logging_logger_t* logger, logging_level_t level, const cha
     if (m_init.lock_function) {
         m_init.lock_function(true);
     }
+    m_write_buffer[0] = '\0';
 
     // time
     if (m_init.time_ms_function) {
