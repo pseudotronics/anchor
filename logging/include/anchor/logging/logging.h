@@ -1,6 +1,7 @@
 // We explicitly don't use include guards as this file should not be included recursively.
 
 #include <inttypes.h>
+#include <stdarg.h>
 #include <stdbool.h>
 
 #ifdef __cplusplus
@@ -60,6 +61,9 @@ typedef struct {
 
 // Initialize the logging library
 bool logging_init(const logging_init_t* init);
+
+// Logs a line which was manually captured through a printf-style function hook / macro
+void logging_log_line(logging_level_t level, const char* file, int line, const char* module_prefix, const char* fmt, va_list args);
 
 // Internal type used to represent a logger (should not be directly modified)
 typedef struct {

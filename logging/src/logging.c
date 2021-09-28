@@ -96,9 +96,8 @@ bool logging_init(const logging_init_t* init) {
     return true;
 }
 
-void logging_log_impl(logging_logger_t* logger, logging_level_t level, const char* file, int line, const char* fmt, ...) {
-    const logging_level_t min_level = logger->level == LOGGING_LEVEL_DEFAULT ? m_init.default_level : logger->level;
-    if (level < min_level) {
+void logging_log_line(logging_level_t level, const char* file, int line, const char* module_prefix, const char* fmt, va_list args) {
+    if (level < m_init.default_level) {
         return;
     }
 
@@ -132,8 +131,8 @@ void logging_log_impl(logging_logger_t* logger, logging_level_t level, const cha
     snprintf(&m_write_buffer[strlen(m_write_buffer)], FULL_LOG_MAX_LENGTH-strlen(m_write_buffer), "%s", LEVEL_PREFIX[level]);
 
     // module (if set)
-    if (logger->module_prefix) {
-        snprintf(&m_write_buffer[strlen(m_write_buffer)], FULL_LOG_MAX_LENGTH-strlen(m_write_buffer), "%s", logger->module_prefix);
+    if (module_prefix) {
+        snprintf(&m_write_buffer[strlen(m_write_buffer)], FULL_LOG_MAX_LENGTH-strlen(m_write_buffer), "%s", module_prefix);
     }
 
     // file name
@@ -143,10 +142,7 @@ void logging_log_impl(logging_logger_t* logger, logging_level_t level, const cha
     snprintf(&m_write_buffer[strlen(m_write_buffer)], FULL_LOG_MAX_LENGTH-strlen(m_write_buffer), ":%d: ", line);
 
     // log message
-    va_list args;
-    va_start(args, fmt);
     vsnprintf(&m_write_buffer[strlen(m_write_buffer)], FULL_LOG_MAX_LENGTH-strlen(m_write_buffer), fmt, args);
-    va_end(args);
 
     // newline
     snprintf(&m_write_buffer[strlen(m_write_buffer)], FULL_LOG_MAX_LENGTH-strlen(m_write_buffer), "\n");
@@ -155,10 +151,21 @@ void logging_log_impl(logging_logger_t* logger, logging_level_t level, const cha
         m_init.write_function(m_write_buffer);
     }
     if (m_init.raw_write_function) {
-        m_init.raw_write_function(level, logger->module_prefix, m_write_buffer);
+        m_init.raw_write_function(level, module_prefix, m_write_buffer);
     }
 
     if (m_init.lock_function) {
         m_init.lock_function(false);
     }
+}
+
+void logging_log_impl(logging_logger_t* logger, logging_level_t level, const char* file, int line, const char* fmt, ...) {
+    const logging_level_t min_level = logger->level == LOGGING_LEVEL_DEFAULT ? m_init.default_level : logger->level;
+    if (level < min_level) {
+        return;
+    }
+    va_list args;
+    va_start(args, fmt);
+    logging_log_line(level, file, line, logger->module_prefix, fmt, args);
+    va_end(args);
 }
