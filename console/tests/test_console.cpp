@@ -8,6 +8,9 @@ extern "C" {
 
 #include <cstring>
 
+#define LEFT_ARROW_SEQUENCE   "\x1b[D"
+#define RIGHT_ARROW_SEQUENCE  "\x1b[C"
+
 extern std::vector<char> g_console_write_buffer;
 
 #define EXPECT_WRITE_BUFFER(str) do { \
@@ -202,4 +205,52 @@ TEST(ConsoleTest, TestTabComplete) {
 
   process_line("\t");
   EXPECT_WRITE_BUFFER("");
+
+  process_line("\n");
+  EXPECT_WRITE_BUFFER("\nhi\n> ");
+}
+
+TEST(ConsoleTest, TestLeftRightArrow) {
+  process_line("sayh");
+  EXPECT_WRITE_BUFFER("sayh");
+
+  process_line(LEFT_ARROW_SEQUENCE);
+  EXPECT_WRITE_BUFFER("\b");
+
+  process_line(RIGHT_ARROW_SEQUENCE);
+  EXPECT_WRITE_BUFFER("h");
+
+  process_line(LEFT_ARROW_SEQUENCE);
+  EXPECT_WRITE_BUFFER("\b");
+
+  process_line("_");
+  EXPECT_WRITE_BUFFER("_h\b");
+
+  process_line(RIGHT_ARROW_SEQUENCE);
+  EXPECT_WRITE_BUFFER("h");
+
+  process_line("i");
+  EXPECT_WRITE_BUFFER("i");
+
+  process_line("\n");
+  EXPECT_WRITE_BUFFER("\nhi\n> ");
+}
+
+TEST(ConsoleTest, TestPrintLine) {
+  process_line("say_");
+  EXPECT_WRITE_BUFFER("say_");
+
+  process_line(LEFT_ARROW_SEQUENCE);
+  EXPECT_WRITE_BUFFER("\b");
+
+  console_print_line("Log line\n");
+  EXPECT_WRITE_BUFFER(
+    "\rLog line\n"
+    "> say_\b");
+
+  process_line(RIGHT_ARROW_SEQUENCE);
+  EXPECT_WRITE_BUFFER("_");
+
+  process_line("hi\n");
+  EXPECT_WRITE_BUFFER("hi\nhi\n> ");
 }

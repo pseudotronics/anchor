@@ -591,6 +591,10 @@ void console_print_line(const char* str) {
         write_str(CONSOLE_PROMPT);
         if (!m_line_invalid) {
             write_str(m_line_buffer);
+            // fix the cursor position if needed
+            for (uint32_t i = 0; i < m_line_len - m_cursor_pos; i++) {
+                write_str("\b");
+            }
         }
     }
 }
