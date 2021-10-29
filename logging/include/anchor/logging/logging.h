@@ -62,7 +62,7 @@ typedef struct {
 // Initialize the logging library
 bool logging_init(const logging_init_t* init);
 
-// Logs a line which was manually captured through a printf-style function hook / macro
+// Logs a line which was manually captured through a printf-style function hook / macro (filtered by the default level)
 void logging_log_line(logging_level_t level, const char* file, int line, const char* module_prefix, const char* fmt, va_list args);
 
 // Internal type used to represent a logger (should not be directly modified)

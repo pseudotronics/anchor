@@ -88,19 +88,7 @@ static void timestamp_to_datetime(uint64_t ms, datetime_t* datetime) {
 }
 #endif
 
-bool logging_init(const logging_init_t* init) {
-    if ((!init->write_function && !init->raw_write_function) || init->default_level == LOGGING_LEVEL_DEFAULT) {
-        return false;
-    }
-    m_init = *init;
-    return true;
-}
-
-void logging_log_line(logging_level_t level, const char* file, int line, const char* module_prefix, const char* fmt, va_list args) {
-    if (level < m_init.default_level) {
-        return;
-    }
-
+static void log_line_helper(logging_level_t level, const char* file, int line, const char* module_prefix, const char* fmt, va_list args) {
     if (m_init.lock_function) {
         m_init.lock_function(true);
     }
@@ -159,6 +147,21 @@ void logging_log_line(logging_level_t level, const char* file, int line, const c
     }
 }
 
+bool logging_init(const logging_init_t* init) {
+    if ((!init->write_function && !init->raw_write_function) || init->default_level == LOGGING_LEVEL_DEFAULT) {
+        return false;
+    }
+    m_init = *init;
+    return true;
+}
+
+void logging_log_line(logging_level_t level, const char* file, int line, const char* module_prefix, const char* fmt, va_list args) {
+    if (level < m_init.default_level) {
+        return;
+    }
+    log_line_helper(level, file, line, module_prefix, fmt, args);
+}
+
 void logging_log_impl(logging_logger_t* logger, logging_level_t level, const char* file, int line, const char* fmt, ...) {
     const logging_level_t min_level = logger->level == LOGGING_LEVEL_DEFAULT ? m_init.default_level : logger->level;
     if (level < min_level) {
@@ -166,6 +169,6 @@ void logging_log_impl(logging_logger_t* logger, logging_level_t level, const cha
     }
     va_list args;
     va_start(args, fmt);
-    logging_log_line(level, file, line, logger->module_prefix, fmt, args);
+    log_line_helper(level, file, line, logger->module_prefix, fmt, args);
     va_end(args);
 }
