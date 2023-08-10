@@ -26,11 +26,6 @@ extern "C" {
 #define LOGGING_USE_DATETIME 0
 #endif
 
-// The application's build scripts can define FILENAME to the name of the file without the full path in order to save code space
-#ifndef FILENAME
-#define FILENAME __FILE__
-#endif
-
 // NOTE: LOGGING_MODULE_NAME can be defined before including this header in order to specify the module which the file belongs to
 
 typedef enum {
@@ -82,7 +77,7 @@ typedef struct {
 #define LOG_ERROR(...) _LOG_LEVEL_IMPL(LOGGING_LEVEL_ERROR, __VA_ARGS__)
 
 // Internal implementation macros / functions which are called via the macros above
-#define _LOG_LEVEL_IMPL(LEVEL, ...) logging_log_impl(&_logging_logger, LEVEL, FILENAME, __LINE__, __VA_ARGS__)
+#define _LOG_LEVEL_IMPL(LEVEL, ...) logging_log_impl(&_logging_logger, LEVEL, __FILE__, __LINE__, __VA_ARGS__)
 void logging_log_impl(logging_logger_t* logger, logging_level_t level, const char* file, int line, const char* fmt, ...) _LOGGING_FORMAT_ATTR;
 
 // Per-file context object which we should create

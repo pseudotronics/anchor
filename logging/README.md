@@ -14,13 +14,13 @@ the level of each module can be changed using the `LOG_SET_LEVEL(...)` macro.
 
 ### Shorter File Names
 
-By default, the logging library will use the `__FILE__` define provided by gcc
-to get the name of the file. To reduce code size, and make the logs easier to
-read, it's recommended to generate a `FILENAME` define at compile time for each
-source file. An example Make rule which does this is shown below:
+The logging library will use the `__FILE__` define provided by gcc to get the
+name of the file. To reduce code size, and make the logs easier to read, it's
+recommended to use the `-fmacro-prefix-map={DIRECTORY}=` GCC option.
+An example Make rule which does this is shown below:
 ```
 $(BUILD_DIR)/%.o: %.c
-	@$(CC) -c -DFILENAME=\"$(notdir $<)\" $(CFLAGS) $< -o $@
+	@$(CC) -c -fmacro-prefix-map=$(dir $<)/= $(CFLAGS) $< -o $@
 ```
 
 ### Module Prefix
