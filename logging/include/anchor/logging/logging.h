@@ -11,7 +11,7 @@
 extern "C" {
 #endif
 
-// The maximum length of a log message (not including extra formatting)
+// The maximum length of a log message (not including extra formatting - not used if LOGGING_CUSTOM_HANDLER is set)
 #ifndef LOGGING_MAX_MSG_LENGTH
 #define LOGGING_MAX_MSG_LENGTH  128
 #endif
@@ -21,10 +21,21 @@ extern "C" {
 #define LOGGING_USE_DATETIME    0
 #endif
 
-// Type which represents a log timestamp in milliseconds
+// Define this in order to replace the logging library's handler - this is useful to implement custom formatters
+#ifndef LOGGING_CUSTOM_HANDLER
+#define LOGGING_CUSTOM_HANDLER  0
+#endif
+
 #if LOGGING_USE_DATETIME
+#define LOGGING_TIMESTAMP_FMT_STR "%04u-%02u-%02u %02u:%02u:%02u.%03u"
+#define LOGGING_TIMESTAMP_FMT_ARGS(COMPONENTS) \
+    (COMPONENTS).year, (COMPONENTS).month, (COMPONENTS).day, \
+    (COMPONENTS).hour, (COMPONENTS).minute, (COMPONENTS).second, (COMPONENTS).ms
 typedef uint64_t logging_timestamp_t;
 #else
+#define LOGGING_TIMESTAMP_FMT_STR "%3u:%02u:%02u.%03u"
+#define LOGGING_TIMESTAMP_FMT_ARGS(COMPONENTS) \
+    (COMPONENTS).hour, (COMPONENTS).minute, (COMPONENTS).second, (COMPONENTS).ms
 typedef uint32_t logging_timestamp_t;
 #endif
 
@@ -37,13 +48,40 @@ typedef enum {
 } logging_level_t;
 
 typedef struct {
+#if LOGGING_USE_DATETIME
+    uint16_t year;
+    uint8_t month;
+    uint8_t day;
+#endif
+    uint8_t hour;
+    uint8_t minute;
+    uint8_t second;
+    uint16_t ms;
+} logging_timestamp_components_t;
+
+typedef struct {
+    logging_level_t level;
+    const char* file;
+    int line;
+    const char* module_prefix;
+    logging_timestamp_t timestamp;
+    logging_timestamp_components_t timestamp_components;
+    const char* fmt;
+    va_list args;
+} logging_line_t;
+
+typedef struct {
+#if LOGGING_CUSTOM_HANDLER
+    // Handler function
+    void(*handler)(const logging_line_t* log_line);
+#else
     // Write function which gets passed a fully-formatted log line
     void(*write_function)(const char* str);
-    // Write function which gets passed the level and module name split out in addition to the fully-formatted log line
-    void(*raw_write_function)(logging_level_t level, const char* module_name, const char* str);
     // A lock function which is called to make the logging library thread-safe
     void(*lock_function)(bool acquire);
+#endif
     // A function which is called to get the current timestamp in milliseconds (either an epoch time or system uptime)
+    // NOTE: This is not called while handling the lock_function() so much be implicitly thread-safe
     logging_timestamp_t(*time_ms_function)(void);
     // The default logging level
     logging_level_t default_level;
@@ -54,6 +92,9 @@ bool logging_init(const logging_init_t* init);
 
 // Logs a line which was manually captured through a printf-style function hook / macro (filtered by the default level)
 void logging_log_line(logging_level_t level, const char* file, int line, const char* module_prefix, const char* fmt, va_list args);
+
+// Formats a log line into the specified buffer
+void logging_format_line(const logging_line_t* log_line, char* buffer, uint32_t size);
 
 // Need to include this after our types or defined
 #include "logging_internal.h"
