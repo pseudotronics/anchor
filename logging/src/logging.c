@@ -38,28 +38,30 @@ static const uint8_t DAYS_PER_MONTH[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31,
 
 static logging_init_t m_init;
 
-static void get_time_components(logging_timestamp_t timestamp, logging_timestamp_components_t* components) {
-    components->ms = timestamp % 1000;
-    timestamp /= 1000;
-    components->second = timestamp % 60;
-    timestamp /= 60;
-    components->minute = timestamp % 60;
-    timestamp /= 60;
-    components->hour = timestamp;
-}
-
 #if LOGGING_USE_DATETIME
 static bool is_leap_year(uint16_t year) {
     // A year is a leap year if it's evenly divisible by 4 unless it's evenly divisible by 100 but not 400.
     return ((year & 3) == 0 && (year % 100)) || (year % 400) == 0;
 }
+#endif
 
-static void get_datetime_components(logging_timestamp_t ms, logging_timestamp_components_t* components) {
-    // Calculate the time portion
-    get_time_components(ms % 86400000, components);
+static void get_timestamp_components(logging_timestamp_t timestamp, logging_timestamp_components_t* components) {
+#if LOGGING_USE_DATETIME
+    logging_timestamp_t seconds_timestamp = timestamp % 86400000;
+#else
+    logging_timestamp_t seconds_timestamp = timestamp;
+#endif
+    components->ms = seconds_timestamp % 1000;
+    seconds_timestamp /= 1000;
+    components->second = seconds_timestamp % 60;
+    seconds_timestamp /= 60;
+    components->minute = seconds_timestamp % 60;
+    seconds_timestamp /= 60;
+    components->hour = seconds_timestamp;
 
+#if LOGGING_USE_DATETIME
     // Calculate days since epoch (add 1 for the current day)
-    uint32_t days = ms / 86400000 + 1;
+    uint32_t days = timestamp / 86400000 + 1;
 
     // Calculate the year
     uint16_t days_in_year = 365;
@@ -87,8 +89,8 @@ static void get_datetime_components(logging_timestamp_t ms, logging_timestamp_co
         }
     }
     components->day = days;
-}
 #endif
+}
 
 #if !LOGGING_CUSTOM_HANDLER
 static void handle_log_line(const logging_line_t* log_line) {
@@ -114,11 +116,7 @@ static void log_line_helper(logging_level_t level, const char* file, int line, c
         .fmt = fmt,
         .args = args,
     };
-#if LOGGING_USE_DATETIME
-    get_datetime_components(log_line.timestamp, &log_line.timestamp_components);
-#else
-    get_time_components(log_line.timestamp, &log_line.timestamp_components);
-#endif
+    get_timestamp_components(log_line.timestamp, &log_line.timestamp_components);
 
 #if LOGGING_CUSTOM_HANDLER
     m_init.handler(&log_line);
@@ -167,7 +165,9 @@ void logging_format_line(const logging_line_t* log_line, char* buffer, uint32_t 
 
     // Add the timestamp
     if (m_init.time_ms_function || log_line->timestamp) {
-        BUFFER_PRINTF(buffer, size, LOGGING_TIMESTAMP_FMT_STR " ", LOGGING_TIMESTAMP_FMT_ARGS(log_line->timestamp_components));
+        logging_timestamp_components_t timestamp_components;
+        get_timestamp_components(log_line->timestamp, &timestamp_components);
+        BUFFER_PRINTF(buffer, size, LOGGING_TIMESTAMP_FMT_STR " ", LOGGING_TIMESTAMP_FMT_ARGS(timestamp_components));
     }
 
     // Add the level
