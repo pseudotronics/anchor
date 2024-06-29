@@ -11,6 +11,10 @@
 
 // Generic command handler type which is used internally by the console library
 typedef void(*console_command_handler_t)(const void*);
+#if CONSOLE_TAB_COMPLETE
+// Handler used for tab-completion
+typedef const char*(*console_tab_complete_iterator_t)(bool);
+#endif
 
 typedef enum {
     // An integer argument (of type "intptr_t")
@@ -41,6 +45,10 @@ typedef struct {
 #endif
     // The command handler
     console_command_handler_t handler;
+#if CONSOLE_TAB_COMPLETE
+    // The auto complete iterator
+    console_tab_complete_iterator_t tab_complete_iter;
+#endif
     // List of argument definitions
     const console_arg_def_t* args;
     // The number of arguments
@@ -56,52 +64,27 @@ typedef struct {
 
 // Defines a console command
 #if CONSOLE_HELP_COMMAND
-#define CONSOLE_COMMAND_DEF(CMD, DESC, ...) \
-    typedef struct { \
-        _CONSOLE_MAP(_CONSOLE_ARG_TYPE_WITH_DESC_HELPER, ##__VA_ARGS__) \
-        const void* const __dummy; /* dummy entry so the struct isn't empty */ \
-    } CMD##_args_t; \
-    _Static_assert(sizeof(CMD##_args_t) == (_CONSOLE_NUM_ARGS(__VA_ARGS__) + 1) * sizeof(void *), \
-        "Compiler created *_args_t struct of unexpected size"); \
-    static void CMD##_command_handler(const CMD##_args_t* args); \
-    static const console_arg_def_t _##CMD##_ARGS_DEF[] = { \
-        _CONSOLE_MAP(_CONSOLE_ARG_DEF_WITH_DESC_HELPER, ##__VA_ARGS__) \
-    }; \
-    static void* _##CMD##_ARGS[_CONSOLE_NUM_ARGS(__VA_ARGS__)]; \
-    static const console_command_def_t _##CMD##_DEF = { \
-        .name = #CMD, \
-        .desc = DESC, \
-        .handler = (console_command_handler_t)CMD##_command_handler, \
-        .args = _##CMD##_ARGS_DEF, \
-        .num_args = sizeof(_##CMD##_ARGS_DEF) / sizeof(console_arg_def_t), \
-        .args_ptr = _##CMD##_ARGS, \
-    }; \
-    static const console_command_def_t* const CMD = &_##CMD##_DEF
+#define CONSOLE_COMMAND_DEF(CMD, DESC, ...) _CONSOLE_COMMAND_DEF(CMD, DESC, ##__VA_ARGS__)
+#if CONSOLE_TAB_COMPLETE
+#define CONSOLE_COMMAND_DEF_WITH_TAB_COMPLETION(CMD, DESC, ...) _CONSOLE_COMMAND_DEF_WITH_TAB_COMPLETION(CMD, DESC, ##__VA_ARGS__)
+#endif
 #else
-#define CONSOLE_COMMAND_DEF(CMD, ...) \
-    static void CMD##_command_handler(void); \
-    static const console_arg_def_t _##CMD##_ARGS[] = { \
-        _CONSOLE_MAP(_CONSOLE_ARG_DEF_HELPER, ##__VA_ARGS__) \
-    }; \
-    static const console_command_def_t _##CMD##_DEF = { \
-        .name = #CMD, \
-        .handler = CMD##_command_handler, \
-        .args = _##CMD##_ARGS, \
-        .num_args = sizeof(_##CMD##_ARGS) / sizeof(console_arg_def_t), \
-    }; \
-    static const console_command_def_t* const CMD = &_##CMD##_DEF
+#define CONSOLE_COMMAND_DEF(CMD, ...) _CONSOLE_COMMAND_DEF(CMD, NULL, ##__VA_ARGS__)
+#if CONSOLE_TAB_COMPLETE
+#define CONSOLE_COMMAND_DEF_WITH_TAB_COMPLETION(CMD, ...) _CONSOLE_COMMAND_DEF_WITH_TAB_COMPLETION(CMD, NULL, ##__VA_ARGS__)
+#endif
 #endif
 
 // Defines an integer argument of a console command
 #if CONSOLE_HELP_COMMAND
-#define CONSOLE_INT_ARG_DEF(NAME, DESC) (NAME, DESC, CONSOLE_ARG_TYPE_INT, false, intptr_t)
+#define CONSOLE_INT_ARG_DEF(NAME, DESC) (NAME, CONSOLE_ARG_TYPE_INT, false, intptr_t, DESC)
 #else
 #define CONSOLE_INT_ARG_DEF(NAME) (NAME, CONSOLE_ARG_TYPE_INT, false, intptr_t)
 #endif
 
 // Defines a string argument of a console command
 #if CONSOLE_HELP_COMMAND
-#define CONSOLE_STR_ARG_DEF(NAME, DESC) (NAME, DESC, CONSOLE_ARG_TYPE_STR, false, const char*)
+#define CONSOLE_STR_ARG_DEF(NAME, DESC) (NAME, CONSOLE_ARG_TYPE_STR, false, const char*, DESC)
 #else
 #define CONSOLE_STR_ARG_DEF(NAME) (NAME, CONSOLE_ARG_TYPE_STR, false, const char*)
 #endif
@@ -109,7 +92,7 @@ typedef struct {
 // Defines an optional integer argument of a console command (can ONLY be used for the last argument)
 // The argument will have a value of `CONSOLE_INT_ARG_DEFAULT` when not specified
 #if CONSOLE_HELP_COMMAND
-#define CONSOLE_OPTIONAL_INT_ARG_DEF(NAME, DESC) (NAME, DESC, CONSOLE_ARG_TYPE_INT, true, intptr_t)
+#define CONSOLE_OPTIONAL_INT_ARG_DEF(NAME, DESC) (NAME, CONSOLE_ARG_TYPE_INT, true, intptr_t, DESC)
 #else
 #define CONSOLE_OPTIONAL_INT_ARG_DEF(NAME) (NAME, CONSOLE_ARG_TYPE_INT, true, intptr_t)
 #endif
@@ -117,7 +100,7 @@ typedef struct {
 // Defines an optional string argument of a console command (can ONLY be used for the last argument)
 // The argument will have a value of `CONSOLE_STR_ARG_DEFAULT` when not specified
 #if CONSOLE_HELP_COMMAND
-#define CONSOLE_OPTIONAL_STR_ARG_DEF(NAME, DESC) (NAME, DESC, CONSOLE_ARG_TYPE_STR, true, const char*)
+#define CONSOLE_OPTIONAL_STR_ARG_DEF(NAME, DESC) (NAME, CONSOLE_ARG_TYPE_STR, true, const char*, DESC)
 #else
 #define CONSOLE_OPTIONAL_STR_ARG_DEF(NAME) (NAME, CONSOLE_ARG_TYPE_STR, true, const char*)
 #endif

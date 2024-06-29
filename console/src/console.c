@@ -6,16 +6,33 @@
 
 #define CHAR_CTRL_C     0x03
 
+#define FOREACH_COMMAND(VAR) \
+    for (uint32_t __i = 0; __i < m_num_commands; __i++) \
+        for (const console_command_def_t* VAR = &m_commands[__i]; VAR; VAR = NULL)
+
 typedef union {
     intptr_t value_int;
     const char* value_str;
     void* ptr;
 } parsed_arg_t;
 
+typedef enum {
+    PROCESS_ERROR_SUCCESS = 0,
+    PROCESS_ERROR_LEADING_WHITESPACE,
+    PROCESS_ERROR_EXTRA_WHITESPACE,
+    PROCESS_ERROR_EMPTY_LINE,
+} process_error_t;
+
 #if CONSOLE_HELP_COMMAND
+#if CONSOLE_TAB_COMPLETE
+CONSOLE_COMMAND_DEF_WITH_TAB_COMPLETION(help, "List all commands, or give details about a specific command",
+    CONSOLE_OPTIONAL_STR_ARG_DEF(command, "The name of the command to give details about")
+);
+#else
 CONSOLE_COMMAND_DEF(help, "List all commands, or give details about a specific command",
     CONSOLE_OPTIONAL_STR_ARG_DEF(command, "The name of the command to give details about")
 );
+#endif
 #endif
 
 static console_init_t m_init;
@@ -45,9 +62,9 @@ static bool validate_arg_def(const console_arg_def_t* arg, bool is_last) {
 }
 
 static const console_command_def_t* get_command(const char* name) {
-    for (uint32_t i = 0; i < m_num_commands; i++) {
-        if (!strcmp(m_commands[i].name, name)) {
-            return &m_commands[i];
+    FOREACH_COMMAND(cmd_def) {
+        if (!strcmp(cmd_def->name, name)) {
+            return cmd_def;
         }
     }
     return NULL;
@@ -97,10 +114,26 @@ static uint32_t get_num_required_args(const console_command_def_t* cmd) {
             return 0;
     }
 }
-
-static void process_line(void) {
-    if (m_line_invalid) {
+#if CONSOLE_HISTORY
+static void history_add_line(void) {
+    if (!strcmp(m_history_buffer[(m_history_start_index + m_history_len) % CONSOLE_HISTORY], m_line_buffer)) {
+        // same as the previous history line, so don't bother re-adding it
         return;
+    }
+    const uint32_t history_write_index = (m_history_start_index + m_history_len + 1) % CONSOLE_HISTORY;
+    strcpy(m_history_buffer[history_write_index], m_line_buffer);
+    if (m_history_len == CONSOLE_HISTORY) {
+        // history buffer is full, so drop the first element to clear room for the new one
+        m_history_start_index = (m_history_start_index + 1) % CONSOLE_HISTORY;
+    } else {
+        m_history_len++;
+    }
+}
+#endif
+
+static const console_command_def_t* parse_line(uint32_t* num_args) {
+    if (m_line_invalid) {
+        return NULL;
     }
 
     // parse and validate the line
@@ -115,25 +148,28 @@ static void process_line(void) {
                 if (cmd) {
                     // too much whitespace
                     write_str("ERROR: Extra whitespace between arguments"CONSOLE_NEWLINE);
-                    return;
+                    return NULL;
                 } else {
-                    // empty line - silently fail
-                    return;
+                    bool is_empty = true;
+                    for (uint32_t j = 0; j < m_line_len; j++) {
+                        if (m_line_buffer[j] != ' ') {
+                            is_empty = false;
+                            break;
+                        }
+                    }
+                    if (!is_empty) {
+                        write_str("ERROR: Whitespace before command"CONSOLE_NEWLINE);
+                    }
+                    return NULL;
                 }
             }
+
 #if CONSOLE_HISTORY
-            if (!cmd && strcmp(m_history_buffer[(m_history_start_index + m_history_len) % CONSOLE_HISTORY], m_line_buffer)) {
-                // add this line to our history since it contains at least one token and is different from the previous history line
-                const uint32_t history_write_index = (m_history_start_index + m_history_len + 1) % CONSOLE_HISTORY;
-                strcpy(m_history_buffer[history_write_index], m_line_buffer);
-                if (m_history_len == CONSOLE_HISTORY) {
-                    // history buffer is full, so drop the first element to clear room for the new one
-                    m_history_start_index = (m_history_start_index + 1) % CONSOLE_HISTORY;
-                } else {
-                    m_history_len++;
-                }
+            if (!cmd) {
+                history_add_line();
             }
 #endif
+
             // process this token
             m_line_buffer[i] = '\0';
             if (!cmd) {
@@ -143,13 +179,13 @@ static void process_line(void) {
                     write_str("ERROR: Command not found (");
                     write_str(current_token);
                     write_str(")"CONSOLE_NEWLINE);
-                    return;
+                    return NULL;
                 }
             } else {
                 // this is an argument
                 if (arg_index == cmd->num_args) {
                     write_str("ERROR: Too many arguments"CONSOLE_NEWLINE);
-                    return;
+                    return NULL;
                 }
                 // validate the argument
                 const console_arg_def_t* arg = &cmd->args[arg_index];
@@ -160,7 +196,7 @@ static void process_line(void) {
                     write_str("' (");
                     write_str(current_token);
                     write_str(")"CONSOLE_NEWLINE);
-                    return;
+                    return NULL;
                 }
                 cmd->args_ptr[arg_index] = parsed_arg.ptr;
                 arg_index++;
@@ -171,28 +207,33 @@ static void process_line(void) {
         }
     }
 
+    *num_args = arg_index;
+    return cmd;
+}
+
+static void process_line(void) {
+    uint32_t num_args = 0;
+    const console_command_def_t* cmd = parse_line(&num_args);
     if (!cmd) {
-        // nothing entered - silently fail
         return;
-    } else if (arg_index < get_num_required_args(cmd)) {
+    } else if (num_args < get_num_required_args(cmd)) {
         write_str("ERROR: Too few arguments"CONSOLE_NEWLINE);
         return;
     }
 
-    if (arg_index != cmd->num_args) {
+    if (num_args != cmd->num_args) {
         // set the optional argument to its default value
-        switch (cmd->args[arg_index].type) {
+        switch (cmd->args[num_args].type) {
             case CONSOLE_ARG_TYPE_INT:
-                cmd->args_ptr[arg_index] = (void*)CONSOLE_INT_ARG_DEFAULT;
+                cmd->args_ptr[num_args] = (void*)CONSOLE_INT_ARG_DEFAULT;
                 break;
             case CONSOLE_ARG_TYPE_STR:
-                cmd->args_ptr[arg_index] = (void*)CONSOLE_STR_ARG_DEFAULT;
+                cmd->args_ptr[num_args] = (void*)CONSOLE_STR_ARG_DEFAULT;
                 break;
         }
     }
 
     // run the handler
-    arg_index = 0;
     m_is_active = true;
     cmd->handler(cmd->args_ptr);
     m_is_active = false;
@@ -252,55 +293,83 @@ static void erase_current_line(uint32_t new_line_line) {
 #endif
 
 #if CONSOLE_TAB_COMPLETE
+static const char* command_tab_complete_iterator(bool start) {
+    static uint32_t iter_index = 0;
+    if (start) {
+        iter_index = 0;
+    }
+    if (iter_index >= m_num_commands) {
+        return NULL;
+    }
+    return m_commands[iter_index++].name;
+}
+
 static void do_tab_complete(void) {
+    m_line_buffer[m_line_len] = '\0';
+    const char* prefix = m_line_buffer;
+    uint32_t prefix_length = m_line_len;
+    uint32_t offset = 0;
+    console_tab_complete_iterator_t iter = command_tab_complete_iterator;
+    FOREACH_COMMAND(cmd_def) {
+        const uint32_t cmd_name_len = strlen(cmd_def->name);
+        if (m_line_len < cmd_name_len + 1 || strncmp(cmd_def->name, m_line_buffer, cmd_name_len) || m_line_buffer[cmd_name_len] != ' ') {
+            // current buffer doesn't start with this command
+            continue;
+        }
+        if (cmd_def->tab_complete_iter) {
+            iter = cmd_def->tab_complete_iter;
+            offset = cmd_name_len + 1;
+            prefix += offset;
+            prefix_length -= offset;
+        }
+        break;
+    }
+
     uint32_t num_matches = 0;
     uint32_t longest_common_prefix = 0;
-    const console_command_def_t* first_cmd_def = NULL;
-    for (uint32_t i = 0; i < m_num_commands; i++) {
-        const console_command_def_t* cmd_def = &m_commands[i];
-        if (strncmp(cmd_def->name, m_line_buffer, m_line_len)) {
+    const char* first_tab_complete = NULL;
+    for (const char* tab_complete = iter(true); tab_complete; tab_complete = iter(false)) {
+        if (strncmp(tab_complete, prefix, prefix_length)) {
             continue;
         }
         if (num_matches > 0) {
             for (uint32_t j = 0; j < longest_common_prefix; j++) {
-                if (cmd_def->name[j] != first_cmd_def->name[j]) {
+                if (tab_complete[j] != first_tab_complete[j]) {
                     longest_common_prefix = j;
                     break;
                 }
             }
         } else {
-            first_cmd_def = cmd_def;
-            longest_common_prefix = strlen(cmd_def->name);
+            first_tab_complete = tab_complete;
+            longest_common_prefix = strlen(tab_complete);
         }
         num_matches++;
     }
-    if (num_matches == 0) {
+    const uint32_t completion_length = longest_common_prefix - (m_line_len - offset);
+    if (num_matches == 0 || (num_matches == 1 && completion_length == 0)) {
+        // nothing to auto-complete
         return;
     }
 
     move_cursor_to_end();
-    if (num_matches == 1) {
-        // a single match, so add on the remainder of the command
-        const uint32_t prev_line_len = m_line_len;
-        for (uint32_t i = m_line_len; i < longest_common_prefix; i++) {
-            m_line_buffer[m_line_len++] = first_cmd_def->name[i];
-        }
+    if (completion_length) {
+        // auto complete the remaining common prefix
+        memcpy(&m_line_buffer[m_line_len], &first_tab_complete[m_line_len - offset], completion_length);
+        m_line_buffer[m_line_len + completion_length] = '\0';
+        write_str(&m_line_buffer[m_line_len]);
+        m_line_len += completion_length;
         m_cursor_pos = m_line_len;
-        m_line_buffer[m_line_len] = '\0';
-        write_str(&m_line_buffer[prev_line_len]);
-    } else if (longest_common_prefix == m_line_len) {
-        // multiple matches and we've already entered the longest common prefix,
-        // so print all the potential matches as a new line
+    } else {
+        // nothing left to auto complete so print all the potential matches in a new line
         write_str(CONSOLE_NEWLINE);
-        for (uint32_t i = 0; i < m_num_commands; i++) {
-            const console_command_def_t* cmd_def = &m_commands[i];
-            if (strncmp(cmd_def->name, m_line_buffer, m_line_len)) {
+        for (const char* tab_complete = iter(true); tab_complete; tab_complete = iter(false)) {
+            if (strncmp(tab_complete, prefix, prefix_length)) {
                 continue;
             }
-            if (cmd_def != first_cmd_def) {
+            if (tab_complete != first_tab_complete) {
                 write_str(" ");
             }
-            write_str(cmd_def->name);
+            write_str(tab_complete);
         }
         write_str(CONSOLE_NEWLINE);
         // re-print the prompt and any valid, pending command
@@ -308,21 +377,16 @@ static void do_tab_complete(void) {
         if (!m_line_invalid) {
             write_str(m_line_buffer);
         }
-    } else {
-        // multiple matches and there's a longer common prefix than what's already typed,
-        // so add the rest of it on to the current command
-        const uint32_t prev_line_len = m_line_len;
-        for (uint32_t i = m_line_len; i < longest_common_prefix; i++) {
-            m_line_buffer[m_line_len++] = first_cmd_def->name[i];
-        }
-        m_cursor_pos = m_line_len;
-        m_line_buffer[m_line_len] = '\0';
-        write_str(&m_line_buffer[prev_line_len]);
     }
 }
 #endif
 
 #if CONSOLE_HELP_COMMAND
+#if CONSOLE_TAB_COMPLETE
+static const char* help_tab_complete_iterator(bool start) {
+    return command_tab_complete_iterator(start);
+}
+#endif
 static void help_command_handler(const help_args_t* args) {
     if (args->command != CONSOLE_STR_ARG_DEFAULT) {
         const console_command_def_t* cmd_def = get_command(args->command);
@@ -375,15 +439,13 @@ static void help_command_handler(const help_args_t* args) {
         write_str("Available commands:"CONSOLE_NEWLINE);
         // get the max name length for padding
         uint32_t max_name_len = 0;
-        for (uint32_t i = 0; i < m_num_commands; i++) {
-            const console_command_def_t* cmd_def = &m_commands[i];
+        FOREACH_COMMAND(cmd_def) {
             const uint32_t name_len = strlen(cmd_def->name);
             if (name_len > max_name_len) {
                 max_name_len = name_len;
             }
         }
-        for (uint32_t i = 0; i < m_num_commands; i++) {
-            const console_command_def_t* cmd_def = &m_commands[i];
+        FOREACH_COMMAND(cmd_def) {
             write_str("  ");
             write_str(cmd_def->name);
             if (cmd_def->desc) {

@@ -28,6 +28,7 @@ extern "C" {
     _res ? _arg : DEFAULT_VALUE; \
   })
 
+#if CONSOLE_HELP_COMMAND
 CONSOLE_COMMAND_DEF(say_hi, "Says hi");
 CONSOLE_COMMAND_DEF(say_bye, "Says bye");
 CONSOLE_COMMAND_DEF(minimal, NULL);
@@ -40,6 +41,20 @@ CONSOLE_COMMAND_DEF(stroff, "Prints a string starting from an offset",
   CONSOLE_STR_ARG_DEF(str, "The string"),
   CONSOLE_INT_ARG_DEF(offset, "Offset into the string")
 );
+#else
+CONSOLE_COMMAND_DEF(say_hi);
+CONSOLE_COMMAND_DEF(say_bye);
+CONSOLE_COMMAND_DEF(minimal);
+CONSOLE_COMMAND_DEF(add,
+  CONSOLE_INT_ARG_DEF(num1),
+  CONSOLE_INT_ARG_DEF(num2),
+  CONSOLE_OPTIONAL_INT_ARG_DEF(num3)
+);
+CONSOLE_COMMAND_DEF(stroff,
+  CONSOLE_STR_ARG_DEF(str),
+  CONSOLE_INT_ARG_DEF(offset)
+);
+#endif
 
 std::vector<char> g_console_write_buffer;
 

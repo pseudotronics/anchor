@@ -164,6 +164,7 @@ TEST(ConsoleTest, TestInvalidStroffCommand) {
     "ERROR: Invalid value for 'offset' (test)\n> ");
 }
 
+#if CONSOLE_HELP_COMMAND
 TEST(ConsoleTest, TestHelpCommand) {
   process_line("help\n");
   EXPECT_WRITE_BUFFER("help\n"
@@ -192,6 +193,7 @@ TEST(ConsoleTest, TestHelpCommand) {
     "Usage: minimal\n"
     "> ");
 }
+#endif
 
 TEST(ConsoleTest, TestTabComplete) {
   process_line("sa\t");
