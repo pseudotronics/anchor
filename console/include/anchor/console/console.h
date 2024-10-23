@@ -11,6 +11,7 @@
 
 // Generic command handler type which is used internally by the console library
 typedef void(*console_command_handler_t)(const void*);
+typedef void(*console_command_handler_no_args_t)(void);
 #if CONSOLE_TAB_COMPLETE
 // Handler used for tab-completion
 typedef const char*(*console_tab_complete_iterator_t)(bool);
@@ -44,7 +45,10 @@ typedef struct {
     const char* desc;
 #endif
     // The command handler
-    console_command_handler_t handler;
+    union {
+        console_command_handler_t handler;
+        console_command_handler_no_args_t handler_no_args;
+    };
 #if CONSOLE_TAB_COMPLETE
     // The auto complete iterator
     console_tab_complete_iterator_t tab_complete_iter;

@@ -235,7 +235,11 @@ static void process_line(void) {
 
     // run the handler
     m_is_active = true;
-    cmd->handler(cmd->args_ptr);
+    if (cmd->num_args) {
+        cmd->handler(cmd->args_ptr);
+    } else {
+        cmd->handler_no_args();
+    }
     m_is_active = false;
 }
 

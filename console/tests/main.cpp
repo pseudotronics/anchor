@@ -65,15 +65,15 @@ static void write_function(const char* str) {
   }
 }
 
-static void say_hi_command_handler(const say_hi_args_t* args) {
+static void say_hi_command_handler(void) {
   write_function("hi\n");
 }
 
-static void say_bye_command_handler(const say_bye_args_t* args) {
+static void say_bye_command_handler(void) {
   write_function("hi\n");
 }
 
-static void minimal_command_handler(const minimal_args_t* args) {
+static void minimal_command_handler(void) {
   write_function("Hello world!\n");
 }
 

@@ -49,12 +49,16 @@ argument (can only be used for the last argument).
 argument (can only be used for the last argument).
 
 The `CONSOLE_COMMAND_DEF()` macro will forward declare a handler for the
-console command with the following prototype:
-`static void <CMD>_command_handler(const <CMD>_args_t* args);`. This function
-will be called whenver the console command is invoked, with the `args` argument
-containing the validated, parsed, and appropriately typed (`intptr_t` /
-`const char*`) arguments. For optional arguments, a default value of `-1` /
-`NULL` will be set for integer / string arguments respectively.
+console command with one of the following prototypes depending on whether or not
+the command has arguments:
+* `static void <CMD>_command_handler(const <CMD>_args_t* args);`
+* `static void <CMD>_command_handler(void);`
+
+This function will be called whenever the console command is invoked, with the
+`args` argument (if applicable) containing the validated, parsed, and
+appropriately typed (`intptr_t` / `const char*`) arguments. For optional
+arguments, a default value of `-1` / `NULL` will be set for integer / string
+arguments respectively.
 
 ### Initializing the Library and Registering Commands
 
@@ -102,8 +106,10 @@ These tests are built using
 
 ## Example
 
-```
+```c
 #include "anchor/console/console.h"
+
+CONSOLE_COMMAND_DEF(hello_world, "Prints a greeting");
 
 CONSOLE_COMMAND_DEF(gpio_set, "Sets a GPIO pin",
     CONSOLE_STR_ARG_DEF(port, "The port <A,B,C>"),
@@ -116,12 +122,16 @@ CONSOLE_COMMAND_DEF(gpio_get, "Gets a GPIO pin value",
     CONSOLE_INT_ARG_DEF(pin, "The pin <0-15>")
 );
 
+static void hello_world_command_handler(void) {
+    printf("Hello World\n");
+}
+
 static void gpio_set_command_handler(const gpio_set_args_t* args) {
     gpio_write(args->port, args->pin, args->value);
 }
 
 static void gpio_get_command_handler(const gpio_get_args_t* args) {
-    printf("value=%d", gpio_read(args->port, args->pin));
+    printf("value=%d\n", gpio_read(args->port, args->pin));
 }
 
 void main(void) {
