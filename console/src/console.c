@@ -536,7 +536,7 @@ void console_process(const uint8_t* data, uint32_t length) {
             bool update_line_from_history = false;
             if (c == 'A') {
                 // up arrow
-                if (m_history_index + 1 < m_history_len) {
+                if (m_history_index + 1 < (int32_t)m_history_len) {
                     m_history_index++;
                     update_line_from_history = true;
                 }
@@ -592,7 +592,7 @@ void console_process(const uint8_t* data, uint32_t length) {
                 if (m_cursor_pos != m_line_len) {
                     write_str(&m_line_buffer[m_cursor_pos]);
                     write_str(" ");
-                    for (uint32_t i = 0; i < m_line_len - m_cursor_pos + 1; i++) {
+                    for (uint32_t j = 0; j < m_line_len - m_cursor_pos + 1; j++) {
                         write_str("\b");
                     }
                 }
@@ -615,7 +615,7 @@ void console_process(const uint8_t* data, uint32_t length) {
                 const uint32_t prev_cursor_pos = m_cursor_pos;
                 push_char(c);
                 write_str(&m_line_buffer[prev_cursor_pos]);
-                for (uint32_t i = 0; i < m_line_len - m_cursor_pos; i++) {
+                for (uint32_t j = 0; j < m_line_len - m_cursor_pos; j++) {
                     write_str("\b");
                 }
             } else {
